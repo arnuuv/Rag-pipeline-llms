@@ -85,3 +85,22 @@ Basic evaluation tool to measure RAG pipeline performance against ground truth.
 ## Advanced Usage
 
 ### Using PDF Loader
+
+### Evaluating Performance
+
+## Customization
+
+You can customize various aspects of the RAG pipeline:
+
+- **Chunk Size**: Modify `chunk_size` and `chunk_overlap` in `ingest_documents()`
+- **Retrieval Parameters**: Adjust the `k` value in `setup_retriever()`
+- **LLM Parameters**: Change the `temperature` in the `RAGPipeline` initialization
+- **Prompt Template**: Customize the prompt in `setup_qa_chain()`
+
+## License
+
+MIT
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
