@@ -9,6 +9,7 @@ This repository contains a complete implementation of a Retrieval-Augmented Gene
 - 💾 Persistent vector database for efficient retrieval
 - 🧠 Context-aware LLM responses
 - 📊 Basic evaluation toolkit
+- 📝 Query history and logging system
 
 ## Quick Start
 
@@ -60,6 +61,8 @@ This repository contains a complete implementation of a Retrieval-Augmented Gene
 4. **Ask questions**:
    - Type your questions when prompted
    - Type "exit" to quit
+   - Type "history" to see your 5 most recent queries
+   - Type "search: keyword" to find relevant past queries
 
 ## Components
 
@@ -71,6 +74,7 @@ The main component that ties everything together:
 - Vector database management
 - Retrieval system setup
 - LLM integration
+- Query history and logging
 
 ### Document Loaders
 
@@ -86,7 +90,57 @@ Basic evaluation tool to measure RAG pipeline performance against ground truth.
 
 ### Using PDF Loader
 
+```python
+from pdf_loader import load_pdf
+
+pdf_docs = load_pdf("path/to/your/document.pdf")
+# Process pdf_docs with your RAG pipeline
+```
+
+### Using Web Loader
+
+```python
+from web_loader import load_webpage
+
+web_docs = load_webpage("https://example.com/page")
+# Process web_docs with your RAG pipeline
+```
+
+### Using Query History
+
+The RAG pipeline automatically logs all queries and their responses to a file called `query_history.json`. You can:
+
+1. View recent queries with the `history` command
+2. Search through past queries with `search: keyword`
+3. Access the history programmatically:
+
+```python
+from rag import RAGPipeline
+
+rag = RAGPipeline()
+# Get all history
+all_history = rag.get_query_history()
+
+# Get last 10 queries
+recent = rag.get_query_history(10)
+
+# Search for specific queries
+results = rag.search_query_history("specific topic")
+```
+
 ### Evaluating Performance
+
+```python
+from evaluation import evaluate_rag
+from rag import RAGPipeline
+
+rag = RAGPipeline()
+questions = ["What is RAG?", "How does vector search work?"]
+ground_truth = ["Retrieval-Augmented Generation", "similarity search"]
+
+accuracy = evaluate_rag(rag, questions, ground_truth)
+print(f"Accuracy: {accuracy}")
+```
 
 ## Customization
 
@@ -96,6 +150,7 @@ You can customize various aspects of the RAG pipeline:
 - **Retrieval Parameters**: Adjust the `k` value in `setup_retriever()`
 - **LLM Parameters**: Change the `temperature` in the `RAGPipeline` initialization
 - **Prompt Template**: Customize the prompt in `setup_qa_chain()`
+- **Query Log Path**: Change the file path in the `RAGPipeline` initialization
 
 ## License
 
