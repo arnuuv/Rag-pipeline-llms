@@ -1,5 +1,6 @@
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+import json
 import chromadb
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -9,16 +10,74 @@ from langchain.llms import OpenAI
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
 
 class RAGPipeline:
-    def __init__(self, documents_dir: str = "data/documents"):
+    def __init__(self, documents_dir: str = "data/documents", query_log_path: str = "query_history.json"):
         self.documents_dir = documents_dir
         self.embeddings = OpenAIEmbeddings()
         self.vector_db = None
         self.llm = OpenAI(temperature=0)
+        self.query_log_path = query_log_path
+        self.query_history = self._load_query_history()
+        
+    def _load_query_history(self) -> List[Dict[str, Any]]:
+        """Load query history from file if it exists."""
+        if os.path.exists(self.query_log_path):
+            try:
+                with open(self.query_log_path, 'r') as f:
+                    return json.load(f)
+            except json.JSONDecodeError:
+                print(f"Error loading query history file. Starting with empty history.")
+                return []
+        return []
+        
+    def _save_query_history(self):
+        """Save query history to file."""
+        with open(self.query_log_path, 'w') as f:
+            json.dump(self.query_history, f, indent=2)
+            
+    def log_query(self, query: str, answer: str, sources: List[str], metadata: Optional[Dict[str, Any]] = None):
+        """Log a query and its results to the query history."""
+        timestamp = datetime.now().isoformat()
+        
+        # Create log entry
+        log_entry = {
+            "timestamp": timestamp,
+            "query": query,
+            "answer": answer,
+            "sources": sources,
+            "metadata": metadata or {}
+        }
+        
+        # Add to history
+        self.query_history.append(log_entry)
+        
+        # Save updated history
+        self._save_query_history()
+        
+        return log_entry
+    
+    def get_query_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get the most recent query history entries."""
+        if limit:
+            return self.query_history[-limit:]
+        return self.query_history
+    
+    def search_query_history(self, search_term: str) -> List[Dict[str, Any]]:
+        """Search the query history for a term in queries or answers."""
+        search_term = search_term.lower()
+        results = []
+        
+        for entry in self.query_history:
+            if (search_term in entry["query"].lower() or 
+                search_term in entry["answer"].lower()):
+                results.append(entry)
+                
+        return results
         
     def ingest_documents(self):
         """Load documents and create vector store."""
@@ -103,17 +162,29 @@ class RAGPipeline:
         
         return chain
         
-    def answer_question(self, question: str) -> Dict[str, Any]:
+    def answer_question(self, question: str, log_query: bool = True) -> Dict[str, Any]:
         """Process a question through the RAG pipeline."""
         chain = self.setup_qa_chain()
         if not chain:
             return {"answer": "System not ready. Please ingest documents first."}
             
         result = chain({"query": question})
-        return {
+        
+        response = {
             "answer": result["result"],
             "source_documents": [doc.page_content for doc in result["source_documents"]]
         }
+        
+        # Log the query if requested
+        if log_query:
+            self.log_query(
+                query=question,
+                answer=response["answer"],
+                sources=response["source_documents"],
+                metadata={"timestamp": datetime.now().isoformat()}
+            )
+        
+        return response
 
 # Example usage
 if __name__ == "__main__":
@@ -124,13 +195,34 @@ if __name__ == "__main__":
     
     # Answer questions
     while True:
-        question = input("\nEnter your question (or 'exit' to quit): ")
+        question = input("\nEnter your question (or 'exit' to quit, 'history' to see past queries): ")
+        
         if question.lower() == 'exit':
             break
+        elif question.lower() == 'history':
+            history = rag.get_query_history(5)  # Get the last 5 queries
+            if history:
+                print("\n===== Recent Queries =====")
+                for i, entry in enumerate(history):
+                    print(f"\n[{i+1}] Q: {entry['query']}")
+                    print(f"    A: {entry['answer'][:100]}...")
+                    print(f"    Time: {entry['timestamp']}")
+            else:
+                print("\nNo query history found.")
+        elif question.lower().startswith('search:'):
+            search_term = question[7:].strip()
+            results = rag.search_query_history(search_term)
+            if results:
+                print(f"\nFound {len(results)} matches for '{search_term}':")
+                for i, entry in enumerate(results):
+                    print(f"\n[{i+1}] Q: {entry['query']}")
+                    print(f"    A: {entry['answer'][:100]}...")
+            else:
+                print(f"\nNo matches found for '{search_term}'")
+        else:
+            result = rag.answer_question(question)
+            print(f"\nAnswer: {result['answer']}")
             
-        result = rag.answer_question(question)
-        print(f"\nAnswer: {result['answer']}")
-        
-        print("\nSources:")
-        for i, doc in enumerate(result["source_documents"]):
-            print(f"\nSource {i+1}:\n{doc[:200]}...") 
+            print("\nSources:")
+            for i, doc in enumerate(result["source_documents"]):
+                print(f"\nSource {i+1}:\n{doc[:200]}...") 
